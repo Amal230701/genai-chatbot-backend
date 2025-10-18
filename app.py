@@ -3,8 +3,10 @@ import json
 import os
 import re
 from random import choice
+from flask_cors import CORS  # <-- Added for CORS
 
 app = Flask(__name__)
+CORS(app)  # <-- Allow frontend requests from any domain
 
 # ---------- LOAD KNOWLEDGE BASE ----------
 def load_kb(file="knowledge_base.json"):
@@ -22,12 +24,8 @@ def load_kb(file="knowledge_base.json"):
 # Load the knowledge base once when the app starts
 kb = load_kb()
 
-# ---------- MEMORY (Session-based instead of global file) ----------
-# In a real web app, you'd use sessions, databases, or another method
-# to handle concurrent users. For simplicity, we'll keep the file-based
-# memory but acknowledge its limitations.
+# ---------- MEMORY (Session-based) ----------
 def load_memory(file="user_memory.json"):
-    """Loads user memory from a JSON file."""
     if os.path.exists(file):
         with open(file, "r", encoding="utf-8") as f:
             try:
@@ -37,13 +35,11 @@ def load_memory(file="user_memory.json"):
     return {}
 
 def save_memory(memory, file="user_memory.json"):
-    """Saves user memory to a JSON file."""
     with open(file, "w", encoding="utf-8") as f:
         json.dump(memory, f, indent=2)
 
-# ---------- DYNAMIC INTENT DETECTION LOGIC (from chatbot.py) ----------
+# ---------- DYNAMIC INTENT DETECTION LOGIC ----------
 def find_best_match(user_input, questions):
-    """Finds the best matching question from the knowledge base."""
     user_words = set(re.findall(r'\w+', user_input.lower()))
     if not user_words:
         return None
@@ -65,7 +61,6 @@ def find_best_match(user_input, questions):
     return best_match if max_score > 1 else None
 
 def detect_intent(user_input, kb):
-    """Detects user's intent dynamically."""
     text = user_input.lower()
 
     if any(word in text for word in ["bye", "exit", "quit"]):
@@ -84,9 +79,8 @@ def detect_intent(user_input, kb):
 
     return "unknown", None
 
-# ---------- DYNAMIC RESPONSE LOGIC (from chatbot.py) ----------
+# ---------- DYNAMIC RESPONSE LOGIC ----------
 def get_response(intent, entity, kb, memory):
-    """Generates a response based on the detected intent."""
     name = memory.get("name", "")
     
     if intent == "greet":
@@ -116,19 +110,24 @@ def get_response(intent, entity, kb, memory):
 @app.route("/chat", methods=["POST"])
 def chat():
     """Main chat endpoint."""
-    if not kb:
-        return jsonify({"response": "Error: Knowledge base not loaded."}), 500
-        
-    data = request.get_json()
-    message = data.get("message", "")
-    if not message:
-        return jsonify({"response": "Error: No message provided."}), 400
+    try:
+        if not kb:
+            return jsonify({"response": "Error: Knowledge base not loaded."}), 500
+            
+        data = request.get_json()
+        message = data.get("message", "")
+        if not message:
+            return jsonify({"response": "Error: No message provided."}), 400
 
-    memory = load_memory()
-    intent, entity = detect_intent(message, kb)
-    response = get_response(intent, entity, kb, memory)
-    
-    return jsonify({"response": response})
+        memory = load_memory()
+        intent, entity = detect_intent(message, kb)
+        response = get_response(intent, entity, kb, memory)
+        
+        return jsonify({"response": response})
+
+    except Exception as e:
+        # Catch any unexpected error
+        return jsonify({"response": f"Error: {str(e)}"}), 500
 
 @app.route("/")
 def home():
